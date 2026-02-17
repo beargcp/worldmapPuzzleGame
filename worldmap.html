@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>World Map Puzzle</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{background:#0a1628;color:#fff;font-family:'Segoe UI','Hiragino Sans',sans-serif;display:flex;flex-direction:column;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+
+/* Header */
+#header{display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:linear-gradient(180deg,#1a2540,#111c32);border-bottom:1px solid #263354;flex-shrink:0;height:44px;z-index:20}
+.logo{font-size:16px;font-weight:700;color:#4dc9f6;text-shadow:0 0 8px rgba(77,201,246,.3);white-space:nowrap}
+.hud{display:flex;gap:12px;align-items:center;font-size:13px}
+.hud-item{display:flex;align-items:center;gap:3px}
+.hud-label{color:#5a7a9b}
+.hud-val{color:#e0e8f0;font-weight:600;min-width:32px}
+.btn{padding:3px 12px;border:1px solid #2a3a5c;border-radius:6px;background:#1a2444;color:#8ab;font-size:12px;cursor:pointer;transition:.15s;white-space:nowrap}
+.btn:hover{background:#2a3a6c;color:#fff}
+.btn:active{transform:scale(.96)}
+
+/* Map area */
+#mapWrap{flex:1;position:relative;overflow:hidden;background:#4a90d9}
+#mapCanvas{position:absolute;top:0;left:0;touch-action:none}
+
+/* Zoom controls (PC only) */
+#zoomControls{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px;z-index:15}
+#zoomControls .zbtn{width:36px;height:36px;border:1px solid #2a4a7c;border-radius:8px;background:rgba(15,25,50,.85);color:#8cf;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;backdrop-filter:blur(4px)}
+#zoomControls .zbtn:hover{background:rgba(30,50,90,.9);color:#fff}
+
+/* Tooltip */
+#tooltip{position:absolute;display:none;background:rgba(12,18,36,.95);border:1px solid #2a4a7c;border-radius:8px;padding:10px 14px;font-size:13px;pointer-events:none;z-index:25;max-width:240px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.tt-name{font-size:15px;font-weight:700;margin-bottom:2px}
+.tt-en{color:#5a8abf;font-size:11px;margin-bottom:6px}
+.tt-info{color:#8aa;font-size:12px;line-height:1.7}
+
+/* Piece panel */
+#piecePanel{flex-shrink:0;background:linear-gradient(0deg,#0e1424,#141e34);border-top:1px solid #263354;z-index:20;display:flex;flex-direction:column}
+#regionTabs{display:flex;gap:0;overflow-x:auto;border-bottom:1px solid #1e2d50;flex-shrink:0}
+#regionTabs::-webkit-scrollbar{height:0}
+.rtab{padding:6px 14px;font-size:12px;color:#5a7a9b;cursor:pointer;border-bottom:2px solid transparent;transition:.15s;white-space:nowrap;flex-shrink:0}
+.rtab:hover{color:#aac}
+.rtab.active{color:#4dc9f6;border-bottom-color:#4dc9f6}
+#pieceList{display:flex;gap:6px;padding:8px 10px;overflow-x:auto;overflow-y:hidden;flex:1;align-items:center}
+#pieceList::-webkit-scrollbar{height:5px}
+#pieceList::-webkit-scrollbar-thumb{background:#2a3a5c;border-radius:3px}
+.pc{min-width:72px;height:72px;background:#141c30;border:2px solid #1e2d50;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:grab;transition:.15s;padding:3px;flex-shrink:0}
+.pc:hover{border-color:#4dc9f6;background:#1a2848;transform:translateY(-2px)}
+.pc.dragging{opacity:.3}
+.pc canvas{width:52px;height:40px;pointer-events:none}
+.pc-label{font-size:10px;color:#7a9abb;margin-top:2px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:68px;pointer-events:none}
+
+/* Footer */
+#footer{display:flex;align-items:center;justify-content:space-between;padding:0 12px;background:#0e1424;border-top:1px solid #263354;flex-shrink:0;height:32px;font-size:12px;z-index:20}
+.pbar{width:180px;height:6px;background:#1a2444;border-radius:3px;overflow:hidden}
+.pfill{height:100%;background:linear-gradient(90deg,#4dc9f6,#34d399);border-radius:3px;transition:width .4s}
+
+/* Modals */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal{background:linear-gradient(135deg,#161e34,#0e1424);border:1px solid #2a4a7c;border-radius:14px;padding:28px 32px;text-align:center;max-width:520px;width:92%;box-shadow:0 8px 40px rgba(0,0,0,.7)}
+.modal h2{font-size:26px;margin-bottom:16px;color:#4dc9f6;text-shadow:0 0 12px rgba(77,201,246,.25)}
+.rgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0}
+.rbtn{padding:12px 8px;border:2px solid #1e2d50;border-radius:10px;background:#141c30;color:#8aa;font-size:14px;cursor:pointer;transition:.15s;text-align:center}
+.rbtn:hover{border-color:#4dc9f6;color:#fff;background:#1a2848}
+.rbtn .cnt{font-size:11px;color:#5a7a9b;display:block;margin-top:2px}
+.rbtn .stars{font-size:12px;color:#f5a623;margin-top:2px;display:block}
+.sbtn{padding:12px 36px;border:none;border-radius:8px;background:linear-gradient(135deg,#4dc9f6,#2a80c8);color:#fff;font-size:17px;font-weight:700;cursor:pointer;transition:.15s;margin-top:14px}
+.sbtn:hover{transform:scale(1.04);box-shadow:0 0 20px rgba(77,201,246,.35)}
+.result-score{font-size:40px;font-weight:700;color:#34d399;margin:8px 0}
+.result-detail{color:#8aa;font-size:13px;line-height:1.8;margin:8px 0 16px}
+.result-stars{font-size:34px;margin:8px 0}
+.hidden{display:none!important}
+
+/* Loading */
+#loading{position:fixed;inset:0;background:#0a1628;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200}
+#loading h1{color:#4dc9f6;font-size:28px;margin-bottom:16px}
+#loading p{color:#5a8abf;font-size:14px}
+.spinner{width:40px;height:40px;border:3px solid #1e2d50;border-top-color:#4dc9f6;border-radius:50%;animation:spin .8s linear infinite;margin:16px 0}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+@media(max-width:640px){
+  #header{height:38px;padding:0 8px}
+  .logo{font-size:13px}
+  .hud{gap:6px;font-size:11px}
+  .btn{padding:2px 8px;font-size:11px}
+  #zoomControls{display:none}
+  .pc{min-width:60px;height:60px}
+  .pc canvas{width:44px;height:32px}
+  .pc-label{font-size:9px;max-width:56px}
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <h1>World Map Puzzle</h1>
+  <div class="spinner"></div>
+  <p id="loadMsg">地図データを読み込んでいます...</p>
+</div>
+
+<div id="header" class="hidden">
+  <div class="logo">World Map Puzzle（for Shinjeometory）</div>
+  <div class="hud">
+    <div class="hud-item"><span class="hud-label">地域:</span><span class="hud-val" id="hRegion">-</span></div>
+    <div class="hud-item"><span class="hud-label">タイム:</span><span class="hud-val" id="hTimer">0:00</span></div>
+    <div class="hud-item"><span class="hud-label">スコア:</span><span class="hud-val" id="hScore">0</span></div>
+    <button class="btn" id="btnHint">ヒント</button>
+    <button class="btn" id="btnMenu">メニュー</button>
+  </div>
+</div>
+
+<div id="mapWrap" class="hidden">
+  <canvas id="mapCanvas"></canvas>
+  <div id="zoomControls">
+    <button class="zbtn" id="zoomIn">+</button>
+    <button class="zbtn" id="zoomOut">−</button>
+    <button class="zbtn" id="zoomFit" style="font-size:14px">⊡</button>
+  </div>
+  <div id="tooltip"><div class="tt-name"></div><div class="tt-en"></div><div class="tt-info"></div></div>
+</div>
+
+<div id="piecePanel" class="hidden">
+  <div id="regionTabs"></div>
+  <div id="pieceList"></div>
+</div>
+
+<div id="footer" class="hidden">
+  <div style="display:flex;align-items:center;gap:8px">
+    <span>進捗: <span id="fProg">0/0</span></span>
+    <div class="pbar"><div class="pfill" id="fBar" style="width:0%"></div></div>
+  </div>
+  <button class="btn" id="btnReset" style="font-size:11px">リセット</button>
+</div>
+
+<!-- Menu Modal -->
+<div class="overlay hidden" id="menuModal">
+  <div class="modal">
+    <h2>World Map Puzzle</h2>
+    <p style="color:#5a8abf;margin-bottom:12px;font-size:14px">地域を選んでパズルに挑戦しよう！</p>
+    <div class="rgrid" id="regionGrid"></div>
+    <button class="sbtn" id="btnStart">スタート</button>
+  </div>
+</div>
+
+<!-- Complete Modal -->
+<div class="overlay hidden" id="completeModal">
+  <div class="modal">
+    <h2>COMPLETE!</h2>
+    <div class="result-score" id="cScore">0</div>
+    <div class="result-detail" id="cDetail"></div>
+    <div class="result-stars" id="cStars"></div>
+    <button class="sbtn" id="btnBack">メニューに戻る</button>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// WORLD MAP PUZZLE - Full Game with Real GeoJSON Data
+// ================================================================
+
+// --- Constants ---
+const TOPOJSON_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json';
+const OCEAN_COLOR = '#4a90d9';
+const LAND_COLOR = '#ffffff';
+const BORDER_COLOR = '#999999';
+const PLACED_BORDER = '#ffffff';
+
+const REGION_COLORS = {
+  asia: '#34d399',
+  europe: '#60a5fa',
+  africa: '#f59e0b',
+  north_america: '#f87171',
+  south_america: '#a78bfa',
+  oceania: '#fb923c'
+};
+
+const REGION_META = {
+  asia: {name:'アジア', bounds:[25,150,-12,55]},
+  europe: {name:'ヨーロッパ', bounds:[-25,45,34,72]},
+  africa: {name:'アフリカ', bounds:[-20,55,-36,38]},
+  north_america: {name:'北米・中米', bounds:[-170,-50,5,85]},
+  south_america: {name:'南米', bounds:[-85,-32,-56,14]},
+  oceania: {name:'オセアニア', bounds:[110,180,-48,2]},
+  world: {name:'全世界', bounds:null} // handled specially in fitCamera
+};
+
+// --- Country Info: ISO 3166-1 numeric -> details ---
+const CI = {
+'004':{n:'アフガニスタン',e:'Afghanistan',r:'asia',c:'カブール',p:'3900万',a:'65.2万km²'},
+'008':{n:'アルバニア',e:'Albania',r:'europe',c:'ティラナ',p:'290万',a:'2.9万km²'},
+'012':{n:'アルジェリア',e:'Algeria',r:'africa',c:'アルジェ',p:'4400万',a:'238万km²'},
+'024':{n:'アンゴラ',e:'Angola',r:'africa',c:'ルアンダ',p:'3300万',a:'125万km²'},
+'031':{n:'アゼルバイジャン',e:'Azerbaijan',r:'asia',c:'バクー',p:'1000万',a:'8.7万km²'},
+'032':{n:'アルゼンチン',e:'Argentina',r:'south_america',c:'ブエノスアイレス',p:'4600万',a:'278万km²'},
+'036':{n:'オーストラリア',e:'Australia',r:'oceania',c:'キャンベラ',p:'2600万',a:'769万km²'},
+'040':{n:'オーストリア',e:'Austria',r:'europe',c:'ウィーン',p:'900万',a:'8.4万km²'},
+'050':{n:'バングラデシュ',e:'Bangladesh',r:'asia',c:'ダッカ',p:'1億7000万',a:'14.8万km²'},
+'051':{n:'アルメニア',e:'Armenia',r:'asia',c:'エレバン',p:'300万',a:'3万km²'},
+'056':{n:'ベルギー',e:'Belgium',r:'europe',c:'ブリュッセル',p:'1160万',a:'3.1万km²'},
+'064':{n:'ブータン',e:'Bhutan',r:'asia',c:'ティンプー',p:'78万',a:'3.8万km²'},
+'068':{n:'ボリビア',e:'Bolivia',r:'south_america',c:'スクレ',p:'1200万',a:'110万km²'},
+'070':{n:'ボスニア・ヘルツェゴビナ',e:'Bosnia and Herz.',r:'europe',c:'サラエボ',p:'330万',a:'5.1万km²'},
+'072':{n:'ボツワナ',e:'Botswana',r:'africa',c:'ハボローネ',p:'240万',a:'58.2万km²'},
+'076':{n:'ブラジル',e:'Brazil',r:'south_america',c:'ブラジリア',p:'2億1000万',a:'851万km²'},
+'084':{n:'ベリーズ',e:'Belize',r:'north_america',c:'ベルモパン',p:'40万',a:'2.3万km²'},
+'090':{n:'ソロモン諸島',e:'Solomon Is.',r:'oceania',c:'ホニアラ',p:'70万',a:'2.9万km²'},
+'096':{n:'ブルネイ',e:'Brunei',r:'asia',c:'バンダルスリブガワン',p:'44万',a:'5765km²'},
+'100':{n:'ブルガリア',e:'Bulgaria',r:'europe',c:'ソフィア',p:'690万',a:'11.1万km²'},
+'104':{n:'ミャンマー',e:'Myanmar',r:'asia',c:'ネピドー',p:'5400万',a:'67.7万km²'},
+'108':{n:'ブルンジ',e:'Burundi',r:'africa',c:'ギテガ',p:'1200万',a:'2.8万km²'},
+'112':{n:'ベラルーシ',e:'Belarus',r:'europe',c:'ミンスク',p:'940万',a:'20.8万km²'},
+'116':{n:'カンボジア',e:'Cambodia',r:'asia',c:'プノンペン',p:'1700万',a:'18.1万km²'},
+'120':{n:'カメルーン',e:'Cameroon',r:'africa',c:'ヤウンデ',p:'2700万',a:'47.5万km²'},
+'124':{n:'カナダ',e:'Canada',r:'north_america',c:'オタワ',p:'3800万',a:'998万km²'},
+'140':{n:'中央アフリカ',e:'Central African Rep.',r:'africa',c:'バンギ',p:'490万',a:'62.3万km²'},
+'144':{n:'スリランカ',e:'Sri Lanka',r:'asia',c:'スリジャヤワルダナプラコッテ',p:'2200万',a:'6.6万km²'},
+'148':{n:'チャド',e:'Chad',r:'africa',c:'ンジャメナ',p:'1700万',a:'128万km²'},
+'152':{n:'チリ',e:'Chile',r:'south_america',c:'サンティアゴ',p:'1900万',a:'75.6万km²'},
+'156':{n:'中国',e:'China',r:'asia',c:'北京',p:'14億',a:'960万km²'},
+'170':{n:'コロンビア',e:'Colombia',r:'south_america',c:'ボゴタ',p:'5100万',a:'114万km²'},
+'178':{n:'コンゴ共和国',e:'Congo',r:'africa',c:'ブラザビル',p:'560万',a:'34.2万km²'},
+'180':{n:'コンゴ民主共和国',e:'Dem. Rep. Congo',r:'africa',c:'キンシャサ',p:'9500万',a:'234万km²'},
+'188':{n:'コスタリカ',e:'Costa Rica',r:'north_america',c:'サンホセ',p:'510万',a:'5.1万km²'},
+'191':{n:'クロアチア',e:'Croatia',r:'europe',c:'ザグレブ',p:'400万',a:'5.7万km²'},
+'192':{n:'キューバ',e:'Cuba',r:'north_america',c:'ハバナ',p:'1100万',a:'11万km²'},
+'196':{n:'キプロス',e:'Cyprus',r:'europe',c:'ニコシア',p:'120万',a:'9251km²'},
+'203':{n:'チェコ',e:'Czechia',r:'europe',c:'プラハ',p:'1070万',a:'7.9万km²'},
+'204':{n:'ベナン',e:'Benin',r:'africa',c:'ポルトノボ',p:'1200万',a:'11.3万km²'},
+'208':{n:'デンマーク',e:'Denmark',r:'europe',c:'コペンハーゲン',p:'580万',a:'4.3万km²'},
+'214':{n:'ドミニカ共和国',e:'Dominican Rep.',r:'north_america',c:'サントドミンゴ',p:'1100万',a:'4.9万km²'},
+'218':{n:'エクアドル',e:'Ecuador',r:'south_america',c:'キト',p:'1800万',a:'25.6万km²'},
+'222':{n:'エルサルバドル',e:'El Salvador',r:'north_america',c:'サンサルバドル',p:'650万',a:'2.1万km²'},
+'226':{n:'赤道ギニア',e:'Eq. Guinea',r:'africa',c:'マラボ',p:'140万',a:'2.8万km²'},
+'231':{n:'エチオピア',e:'Ethiopia',r:'africa',c:'アディスアベバ',p:'1億2000万',a:'110万km²'},
+'232':{n:'エリトリア',e:'Eritrea',r:'africa',c:'アスマラ',p:'360万',a:'12.4万km²'},
+'233':{n:'エストニア',e:'Estonia',r:'europe',c:'タリン',p:'130万',a:'4.5万km²'},
+'246':{n:'フィンランド',e:'Finland',r:'europe',c:'ヘルシンキ',p:'550万',a:'33.8万km²'},
+'250':{n:'フランス',e:'France',r:'europe',c:'パリ',p:'6700万',a:'64万km²'},
+'262':{n:'ジブチ',e:'Djibouti',r:'africa',c:'ジブチ',p:'100万',a:'2.3万km²'},
+'266':{n:'ガボン',e:'Gabon',r:'africa',c:'リーブルビル',p:'220万',a:'26.8万km²'},
+'268':{n:'ジョージア',e:'Georgia',r:'asia',c:'トビリシ',p:'370万',a:'7万km²'},
+'270':{n:'ガンビア',e:'Gambia',r:'africa',c:'バンジュール',p:'250万',a:'1.1万km²'},
+'275':{n:'パレスチナ',e:'Palestine',r:'asia',c:'ラマッラー',p:'510万',a:'6020km²'},
+'276':{n:'ドイツ',e:'Germany',r:'europe',c:'ベルリン',p:'8300万',a:'35.7万km²'},
+'288':{n:'ガーナ',e:'Ghana',r:'africa',c:'アクラ',p:'3200万',a:'23.9万km²'},
+'300':{n:'ギリシャ',e:'Greece',r:'europe',c:'アテネ',p:'1000万',a:'13.2万km²'},
+'320':{n:'グアテマラ',e:'Guatemala',r:'north_america',c:'グアテマラシティ',p:'1700万',a:'10.9万km²'},
+'324':{n:'ギニア',e:'Guinea',r:'africa',c:'コナクリ',p:'1300万',a:'24.6万km²'},
+'328':{n:'ガイアナ',e:'Guyana',r:'south_america',c:'ジョージタウン',p:'80万',a:'21.5万km²'},
+'332':{n:'ハイチ',e:'Haiti',r:'north_america',c:'ポルトープランス',p:'1100万',a:'2.8万km²'},
+'340':{n:'ホンジュラス',e:'Honduras',r:'north_america',c:'テグシガルパ',p:'1000万',a:'11.2万km²'},
+'348':{n:'ハンガリー',e:'Hungary',r:'europe',c:'ブダペスト',p:'970万',a:'9.3万km²'},
+'352':{n:'アイスランド',e:'Iceland',r:'europe',c:'レイキャビク',p:'37万',a:'10.3万km²'},
+'356':{n:'インド',e:'India',r:'asia',c:'ニューデリー',p:'14億',a:'329万km²'},
+'360':{n:'インドネシア',e:'Indonesia',r:'asia',c:'ジャカルタ',p:'2億7000万',a:'191万km²'},
+'364':{n:'イラン',e:'Iran',r:'asia',c:'テヘラン',p:'8600万',a:'165万km²'},
+'368':{n:'イラク',e:'Iraq',r:'asia',c:'バグダッド',p:'4100万',a:'43.5万km²'},
+'372':{n:'アイルランド',e:'Ireland',r:'europe',c:'ダブリン',p:'500万',a:'7万km²'},
+'376':{n:'イスラエル',e:'Israel',r:'asia',c:'エルサレム',p:'930万',a:'2.2万km²'},
+'380':{n:'イタリア',e:'Italy',r:'europe',c:'ローマ',p:'6000万',a:'30.1万km²'},
+'384':{n:'コートジボワール',e:"Côte d'Ivoire",r:'africa',c:'ヤムスクロ',p:'2700万',a:'32.2万km²'},
+'388':{n:'ジャマイカ',e:'Jamaica',r:'north_america',c:'キングストン',p:'300万',a:'1.1万km²'},
+'392':{n:'日本',e:'Japan',r:'asia',c:'東京',p:'1億2500万',a:'37.8万km²'},
+'398':{n:'カザフスタン',e:'Kazakhstan',r:'asia',c:'アスタナ',p:'1900万',a:'272万km²'},
+'400':{n:'ヨルダン',e:'Jordan',r:'asia',c:'アンマン',p:'1000万',a:'8.9万km²'},
+'404':{n:'ケニア',e:'Kenya',r:'africa',c:'ナイロビ',p:'5400万',a:'58万km²'},
+'408':{n:'北朝鮮',e:'North Korea',r:'asia',c:'平壌',p:'2600万',a:'12.1万km²'},
+'410':{n:'韓国',e:'South Korea',r:'asia',c:'ソウル',p:'5200万',a:'10万km²'},
+'414':{n:'クウェート',e:'Kuwait',r:'asia',c:'クウェート',p:'430万',a:'1.8万km²'},
+'417':{n:'キルギス',e:'Kyrgyzstan',r:'asia',c:'ビシュケク',p:'660万',a:'20万km²'},
+'418':{n:'ラオス',e:'Laos',r:'asia',c:'ビエンチャン',p:'740万',a:'23.7万km²'},
+'422':{n:'レバノン',e:'Lebanon',r:'asia',c:'ベイルート',p:'680万',a:'1万km²'},
+'426':{n:'レソト',e:'Lesotho',r:'africa',c:'マセル',p:'210万',a:'3万km²'},
+'428':{n:'ラトビア',e:'Latvia',r:'europe',c:'リガ',p:'190万',a:'6.5万km²'},
+'430':{n:'リベリア',e:'Liberia',r:'africa',c:'モンロビア',p:'520万',a:'11.1万km²'},
+'434':{n:'リビア',e:'Libya',r:'africa',c:'トリポリ',p:'700万',a:'176万km²'},
+'440':{n:'リトアニア',e:'Lithuania',r:'europe',c:'ビリニュス',p:'280万',a:'6.5万km²'},
+'442':{n:'ルクセンブルク',e:'Luxembourg',r:'europe',c:'ルクセンブルク',p:'63万',a:'2586km²'},
+'450':{n:'マダガスカル',e:'Madagascar',r:'africa',c:'アンタナナリボ',p:'2800万',a:'58.7万km²'},
+'454':{n:'マラウイ',e:'Malawi',r:'africa',c:'リロングウェ',p:'1900万',a:'11.8万km²'},
+'458':{n:'マレーシア',e:'Malaysia',r:'asia',c:'クアラルンプール',p:'3300万',a:'33万km²'},
+'466':{n:'マリ',e:'Mali',r:'africa',c:'バマコ',p:'2100万',a:'124万km²'},
+'478':{n:'モーリタニア',e:'Mauritania',r:'africa',c:'ヌアクショット',p:'470万',a:'103万km²'},
+'484':{n:'メキシコ',e:'Mexico',r:'north_america',c:'メキシコシティ',p:'1億3000万',a:'196万km²'},
+'496':{n:'モンゴル',e:'Mongolia',r:'asia',c:'ウランバートル',p:'330万',a:'156万km²'},
+'498':{n:'モルドバ',e:'Moldova',r:'europe',c:'キシナウ',p:'260万',a:'3.4万km²'},
+'499':{n:'モンテネグロ',e:'Montenegro',r:'europe',c:'ポドゴリツァ',p:'62万',a:'1.4万km²'},
+'504':{n:'モロッコ',e:'Morocco',r:'africa',c:'ラバト',p:'3700万',a:'44.7万km²'},
+'508':{n:'モザンビーク',e:'Mozambique',r:'africa',c:'マプト',p:'3200万',a:'80万km²'},
+'512':{n:'オマーン',e:'Oman',r:'asia',c:'マスカット',p:'510万',a:'31万km²'},
+'516':{n:'ナミビア',e:'Namibia',r:'africa',c:'ウィントフック',p:'250万',a:'82.4万km²'},
+'520':{n:'ナウル',e:'Nauru',r:'oceania',c:'ヤレン',p:'1万',a:'21km²'},
+'524':{n:'ネパール',e:'Nepal',r:'asia',c:'カトマンズ',p:'3000万',a:'14.7万km²'},
+'528':{n:'オランダ',e:'Netherlands',r:'europe',c:'アムステルダム',p:'1700万',a:'4.2万km²'},
+'540':{n:'ニューカレドニア',e:'New Caledonia',r:'oceania',c:'ヌメア',p:'28万',a:'1.9万km²'},
+'548':{n:'バヌアツ',e:'Vanuatu',r:'oceania',c:'ポートビラ',p:'31万',a:'1.2万km²'},
+'554':{n:'ニュージーランド',e:'New Zealand',r:'oceania',c:'ウェリントン',p:'500万',a:'26.8万km²'},
+'558':{n:'ニカラグア',e:'Nicaragua',r:'north_america',c:'マナグア',p:'680万',a:'13万km²'},
+'562':{n:'ニジェール',e:'Niger',r:'africa',c:'ニアメ',p:'2500万',a:'127万km²'},
+'566':{n:'ナイジェリア',e:'Nigeria',r:'africa',c:'アブジャ',p:'2億1000万',a:'92.4万km²'},
+'578':{n:'ノルウェー',e:'Norway',r:'europe',c:'オスロ',p:'540万',a:'38.5万km²'},
+'586':{n:'パキスタン',e:'Pakistan',r:'asia',c:'イスラマバード',p:'2億2000万',a:'88.1万km²'},
+'591':{n:'パナマ',e:'Panama',r:'north_america',c:'パナマシティ',p:'430万',a:'7.6万km²'},
+'598':{n:'パプアニューギニア',e:'Papua New Guinea',r:'oceania',c:'ポートモレスビー',p:'900万',a:'46.3万km²'},
+'600':{n:'パラグアイ',e:'Paraguay',r:'south_america',c:'アスンシオン',p:'700万',a:'40.7万km²'},
+'604':{n:'ペルー',e:'Peru',r:'south_america',c:'リマ',p:'3300万',a:'129万km²'},
+'608':{n:'フィリピン',e:'Philippines',r:'asia',c:'マニラ',p:'1億1000万',a:'30万km²'},
+'616':{n:'ポーランド',e:'Poland',r:'europe',c:'ワルシャワ',p:'3800万',a:'31.3万km²'},
+'620':{n:'ポルトガル',e:'Portugal',r:'europe',c:'リスボン',p:'1000万',a:'9.2万km²'},
+'624':{n:'ギニアビサウ',e:'Guinea-Bissau',r:'africa',c:'ビサウ',p:'200万',a:'3.6万km²'},
+'626':{n:'東ティモール',e:'Timor-Leste',r:'asia',c:'ディリ',p:'130万',a:'1.5万km²'},
+'630':{n:'プエルトリコ',e:'Puerto Rico',r:'north_america',c:'サンフアン',p:'320万',a:'9104km²'},
+'634':{n:'カタール',e:'Qatar',r:'asia',c:'ドーハ',p:'290万',a:'1.2万km²'},
+'642':{n:'ルーマニア',e:'Romania',r:'europe',c:'ブカレスト',p:'1900万',a:'23.8万km²'},
+'643':{n:'ロシア',e:'Russia',r:'europe',c:'モスクワ',p:'1億4400万',a:'1710万km²'},
+'646':{n:'ルワンダ',e:'Rwanda',r:'africa',c:'キガリ',p:'1300万',a:'2.6万km²'},
+'682':{n:'サウジアラビア',e:'Saudi Arabia',r:'asia',c:'リヤド',p:'3500万',a:'215万km²'},
+'686':{n:'セネガル',e:'Senegal',r:'africa',c:'ダカール',p:'1700万',a:'19.7万km²'},
+'688':{n:'セルビア',e:'Serbia',r:'europe',c:'ベオグラード',p:'690万',a:'8.8万km²'},
+'694':{n:'シエラレオネ',e:'Sierra Leone',r:'africa',c:'フリータウン',p:'800万',a:'7.2万km²'},
+'702':{n:'シンガポール',e:'Singapore',r:'asia',c:'シンガポール',p:'580万',a:'730km²'},
+'703':{n:'スロバキア',e:'Slovakia',r:'europe',c:'ブラチスラバ',p:'550万',a:'4.9万km²'},
+'704':{n:'ベトナム',e:'Vietnam',r:'asia',c:'ハノイ',p:'1億',a:'33.1万km²'},
+'705':{n:'スロベニア',e:'Slovenia',r:'europe',c:'リュブリャナ',p:'210万',a:'2万km²'},
+'706':{n:'ソマリア',e:'Somalia',r:'africa',c:'モガディシュ',p:'1600万',a:'63.8万km²'},
+'710':{n:'南アフリカ',e:'South Africa',r:'africa',c:'プレトリア',p:'6000万',a:'122万km²'},
+'716':{n:'ジンバブエ',e:'Zimbabwe',r:'africa',c:'ハラレ',p:'1500万',a:'39.1万km²'},
+'724':{n:'スペイン',e:'Spain',r:'europe',c:'マドリード',p:'4700万',a:'50.6万km²'},
+'728':{n:'南スーダン',e:'S. Sudan',r:'africa',c:'ジュバ',p:'1100万',a:'64.4万km²'},
+'729':{n:'スーダン',e:'Sudan',r:'africa',c:'ハルツーム',p:'4400万',a:'188万km²'},
+'732':{n:'西サハラ',e:'W. Sahara',r:'africa',c:'-',p:'60万',a:'26.6万km²'},
+'740':{n:'スリナム',e:'Suriname',r:'south_america',c:'パラマリボ',p:'59万',a:'16.4万km²'},
+'748':{n:'エスワティニ',e:'Eswatini',r:'africa',c:'ムババネ',p:'120万',a:'1.7万km²'},
+'752':{n:'スウェーデン',e:'Sweden',r:'europe',c:'ストックホルム',p:'1000万',a:'45万km²'},
+'756':{n:'スイス',e:'Switzerland',r:'europe',c:'ベルン',p:'870万',a:'4.1万km²'},
+'760':{n:'シリア',e:'Syria',r:'asia',c:'ダマスカス',p:'1800万',a:'18.5万km²'},
+'762':{n:'タジキスタン',e:'Tajikistan',r:'asia',c:'ドゥシャンベ',p:'960万',a:'14.3万km²'},
+'764':{n:'タイ',e:'Thailand',r:'asia',c:'バンコク',p:'7000万',a:'51.3万km²'},
+'768':{n:'トーゴ',e:'Togo',r:'africa',c:'ロメ',p:'840万',a:'5.7万km²'},
+'780':{n:'トリニダード・トバゴ',e:'Trinidad and Tobago',r:'north_america',c:'ポートオブスペイン',p:'140万',a:'5131km²'},
+'784':{n:'アラブ首長国連邦',e:'United Arab Emirates',r:'asia',c:'アブダビ',p:'990万',a:'8.4万km²'},
+'788':{n:'チュニジア',e:'Tunisia',r:'africa',c:'チュニス',p:'1200万',a:'16.4万km²'},
+'792':{n:'トルコ',e:'Turkey',r:'europe',c:'アンカラ',p:'8500万',a:'78.4万km²'},
+'795':{n:'トルクメニスタン',e:'Turkmenistan',r:'asia',c:'アシガバート',p:'600万',a:'49.1万km²'},
+'800':{n:'ウガンダ',e:'Uganda',r:'africa',c:'カンパラ',p:'4600万',a:'24.1万km²'},
+'804':{n:'ウクライナ',e:'Ukraine',r:'europe',c:'キーウ',p:'4400万',a:'60.4万km²'},
+'807':{n:'北マケドニア',e:'North Macedonia',r:'europe',c:'スコピエ',p:'210万',a:'2.6万km²'},
+'818':{n:'エジプト',e:'Egypt',r:'africa',c:'カイロ',p:'1億',a:'100万km²'},
+'826':{n:'イギリス',e:'United Kingdom',r:'europe',c:'ロンドン',p:'6700万',a:'24.3万km²'},
+'834':{n:'タンザニア',e:'Tanzania',r:'africa',c:'ドドマ',p:'6100万',a:'94.5万km²'},
+'840':{n:'アメリカ',e:'United States',r:'north_america',c:'ワシントンD.C.',p:'3億3000万',a:'983万km²'},
+'854':{n:'ブルキナファソ',e:'Burkina Faso',r:'africa',c:'ワガドゥグー',p:'2100万',a:'27.4万km²'},
+'858':{n:'ウルグアイ',e:'Uruguay',r:'south_america',c:'モンテビデオ',p:'350万',a:'17.6万km²'},
+'860':{n:'ウズベキスタン',e:'Uzbekistan',r:'asia',c:'タシケント',p:'3400万',a:'44.7万km²'},
+'862':{n:'ベネズエラ',e:'Venezuela',r:'south_america',c:'カラカス',p:'2800万',a:'91.6万km²'},
+'887':{n:'イエメン',e:'Yemen',r:'asia',c:'サナア',p:'3000万',a:'52.8万km²'},
+'894':{n:'ザンビア',e:'Zambia',r:'africa',c:'ルサカ',p:'1900万',a:'75.3万km²'},
+'710':{n:'南アフリカ',e:'South Africa',r:'africa',c:'プレトリア',p:'6000万',a:'122万km²'},
+'926':{n:'コソボ',e:'Kosovo',r:'europe',c:'プリシュティナ',p:'180万',a:'1.1万km²'},
+'-99':{n:'北キプロス',e:'N. Cyprus',r:'europe',c:'レフコシャ',p:'33万',a:'3355km²'},
+'736':{n:'スーダン（旧）',e:'Sudan (old)',r:'africa',c:'ハルツーム',p:'4400万',a:'188万km²'},
+'580':{n:'北マリアナ諸島',e:'N. Mariana Is.',r:'oceania',c:'サイパン',p:'5万',a:'464km²'},
+'016':{n:'アメリカ領サモア',e:'American Samoa',r:'oceania',c:'パゴパゴ',p:'5.5万',a:'199km²'},
+'162':{n:'クリスマス島',e:'Christmas I.',r:'oceania',c:'-',p:'2000',a:'135km²'},
+'166':{n:'ココス諸島',e:'Cocos Is.',r:'oceania',c:'-',p:'600',a:'14km²'},
+'248':{n:'オーランド諸島',e:'Åland Is.',r:'europe',c:'マリエハムン',p:'3万',a:'1580km²'},
+'474':{n:'マルティニーク',e:'Martinique',r:'north_america',c:'フォール=ド=フランス',p:'38万',a:'1128km²'},
+'659':{n:'セントクリストファー・ネイビス',e:'St. Kitts and Nevis',r:'north_america',c:'バセテール',p:'5万',a:'261km²'},
+'796':{n:'タークス・カイコス諸島',e:'Turks and Caicos Is.',r:'north_america',c:'コックバーンタウン',p:'4万',a:'948km²'},
+'660':{n:'アンギラ',e:'Anguilla',r:'north_america',c:'ザバレー',p:'1.5万',a:'91km²'},
+'308':{n:'グレナダ',e:'Grenada',r:'north_america',c:'セントジョージズ',p:'11万',a:'344km²'},
+'670':{n:'セントビンセント・グレナディーン',e:'St. Vin. and Gren.',r:'north_america',c:'キングスタウン',p:'11万',a:'389km²'},
+'028':{n:'アンティグア・バーブーダ',e:'Antigua and Barb.',r:'north_america',c:'セントジョンズ',p:'10万',a:'442km²'},
+'212':{n:'ドミニカ国',e:'Dominica',r:'north_america',c:'ロゾー',p:'7万',a:'751km²'},
+'044':{n:'バハマ',e:'Bahamas',r:'north_america',c:'ナッソー',p:'39万',a:'1.4万km²'},
+'052':{n:'バルバドス',e:'Barbados',r:'north_america',c:'ブリッジタウン',p:'29万',a:'430km²'},
+'533':{n:'アルバ',e:'Aruba',r:'south_america',c:'オラニエスタッド',p:'11万',a:'180km²'},
+'531':{n:'キュラソー',e:'Curaçao',r:'south_america',c:'ウィレムスタッド',p:'15万',a:'444km²'},
+'534':{n:'シント・マールテン',e:'Sint Maarten',r:'north_america',c:'フィリップスバーグ',p:'4万',a:'34km²'},
+'652':{n:'サン・バルテルミー',e:'St-Barthélemy',r:'north_america',c:'グスタビア',p:'1万',a:'21km²'},
+'663':{n:'サン・マルタン',e:'St-Martin',r:'north_america',c:'マリゴ',p:'3.5万',a:'53km²'},
+'654':{n:'セントヘレナ',e:'Saint Helena',r:'africa',c:'ジェームズタウン',p:'6000',a:'394km²'},
+'238':{n:'フォークランド諸島',e:'Falkland Is.',r:'south_america',c:'スタンリー',p:'3400',a:'1.2万km²'},
+'242':{n:'フィジー',e:'Fiji',r:'oceania',c:'スバ',p:'90万',a:'1.8万km²'},
+'583':{n:'ミクロネシア',e:'Micronesia',r:'oceania',c:'パリキール',p:'11万',a:'702km²'},
+'296':{n:'キリバス',e:'Kiribati',r:'oceania',c:'タラワ',p:'12万',a:'811km²'},
+'584':{n:'マーシャル諸島',e:'Marshall Is.',r:'oceania',c:'マジュロ',p:'6万',a:'181km²'},
+'585':{n:'パラオ',e:'Palau',r:'oceania',c:'マルキョク',p:'2万',a:'459km²'},
+'776':{n:'トンガ',e:'Tonga',r:'oceania',c:'ヌクアロファ',p:'10万',a:'747km²'},
+'882':{n:'サモア',e:'Samoa',r:'oceania',c:'アピア',p:'20万',a:'2842km²'},
+'090':{n:'ソロモン諸島',e:'Solomon Is.',r:'oceania',c:'ホニアラ',p:'70万',a:'2.9万km²'},
+'548':{n:'バヌアツ',e:'Vanuatu',r:'oceania',c:'ポートビラ',p:'31万',a:'1.2万km²'},
+'174':{n:'コモロ',e:'Comoros',r:'africa',c:'モロニ',p:'87万',a:'1862km²'},
+'480':{n:'モーリシャス',e:'Mauritius',r:'africa',c:'ポートルイス',p:'130万',a:'2040km²'},
+'690':{n:'セーシェル',e:'Seychelles',r:'africa',c:'ビクトリア',p:'10万',a:'455km²'},
+'678':{n:'サントメ・プリンシペ',e:'São Tomé and Príncipe',r:'africa',c:'サントメ',p:'22万',a:'964km²'},
+};
+
+// ================================================================
+// TOPOJSON DECODER
+// ================================================================
+function decodeTopo(topo) {
+  const tf = topo.transform;
+  const sx = tf.scale[0], sy = tf.scale[1];
+  const tx = tf.translate[0], ty = tf.translate[1];
+
+  // Decode arcs
+  const arcs = topo.arcs.map(arc => {
+    let x = 0, y = 0;
+    return arc.map(d => {
+      x += d[0]; y += d[1];
+      return [x * sx + tx, y * sy + ty];
+    });
+  });
+
+  function ring(indices) {
+    let coords = [];
+    for (const idx of indices) {
+      let arc;
+      if (idx >= 0) {
+        arc = arcs[idx];
+      } else {
+        arc = arcs[~idx].slice().reverse();
+      }
+      // Skip first point of subsequent arcs to avoid duplicates
+      const start = coords.length > 0 ? 1 : 0;
+      for (let i = start; i < arc.length; i++) {
+        coords.push(arc[i]);
+      }
+    }
+    return coords;
+  }
+
+  function decodeGeom(geom) {
+    if (geom.type === 'Polygon') {
+      return { type: 'Polygon', coordinates: geom.arcs.map(r => ring(r)) };
+    }
+    if (geom.type === 'MultiPolygon') {
+      return { type: 'MultiPolygon', coordinates: geom.arcs.map(poly => poly.map(r => ring(r))) };
+    }
+    return geom;
+  }
+
+  const obj = topo.objects.countries;
+  return obj.geometries.map(g => ({
+    id: g.id,
+    properties: g.properties || {},
+    geometry: decodeGeom(g)
+  })).filter(f => f.geometry && f.geometry.coordinates);
+}
+
+// ================================================================
+// MERCATOR PROJECTION
+// ================================================================
+const MAP_W = 1600, MAP_H = 1000;
+const CENTER_LON = 150; // Japan-centered map (Pacific in the middle)
+
+// Shift longitude so CENTER_LON maps to the center of the map.
+// Returns shifted longitude in [-180, 180)
+function shiftLon(lon) {
+  let l = lon - CENTER_LON;
+  while (l > 180) l -= 360;
+  while (l < -180) l += 360;
+  return l;
+}
+
+function lonToX(lon) {
+  const l = shiftLon(lon);
+  return (l + 180) / 360 * MAP_W;
+}
+function latToY(lat) {
+  const r = lat * Math.PI / 180;
+  const merc = Math.log(Math.tan(Math.PI / 4 + r / 2));
+  return (0.5 - merc / (2 * Math.PI)) * MAP_H;
+}
+function projCoords(coords) { return coords.map(c => [lonToX(c[0]), latToY(c[1])]); }
+
+// --- Antimeridian splitting (adapted for CENTER_LON) ---
+// The visual "antimeridian" (map edges) is at CENTER_LON ± 180 = -30° longitude.
+// We detect crossings by comparing shifted longitudes.
+
+function splitRingAtAntimeridian(ring) {
+  let segments = [];
+  let current = [ring[0]];
+
+  for (let i = 1; i < ring.length; i++) {
+    const prev = ring[i - 1];
+    const cur = ring[i];
+    const prevS = shiftLon(prev[0]);
+    const curS = shiftLon(cur[0]);
+    const dLon = curS - prevS;
+
+    if (Math.abs(dLon) > 180) {
+      // Crossing the visual antimeridian
+      const sign = dLon > 0 ? -1 : 1;
+      // Interpolate latitude at the boundary (±180 in shifted space)
+      const adjCurS = curS + sign * 360;
+      const t = (sign * 180 - prevS) / (adjCurS - prevS);
+      const crossLat = prev[1] + t * (cur[1] - prev[1]);
+
+      // Boundary in real lon: ±180 shifted + CENTER_LON
+      const boundaryReal = sign * 180 + CENTER_LON;
+      const otherBoundary = -sign * 180 + CENTER_LON;
+
+      current.push([boundaryReal, crossLat]);
+      segments.push(current);
+      current = [[otherBoundary, crossLat], cur];
+    } else {
+      current.push(cur);
+    }
+  }
+  if (current.length > 0) segments.push(current);
+  return segments;
+}
+
+function ringCrossesAntimeridian(ring) {
+  for (let i = 1; i < ring.length; i++) {
+    if (Math.abs(shiftLon(ring[i][0]) - shiftLon(ring[i - 1][0])) > 180) return true;
+  }
+  return false;
+}
+
+function splitGeometryAtAntimeridian(geometry) {
+  if (geometry.type === 'Polygon') {
+    const outerRing = geometry.coordinates[0];
+    if (!ringCrossesAntimeridian(outerRing)) {
+      return geometry;
+    }
+    const newPolygons = [];
+    const segments = splitRingAtAntimeridian(outerRing);
+    for (const seg of segments) {
+      if (seg.length >= 3) {
+        const closed = [...seg];
+        if (closed[0][0] !== closed[closed.length-1][0] || closed[0][1] !== closed[closed.length-1][1]) {
+          closed.push([...closed[0]]);
+        }
+        newPolygons.push([closed]);
+      }
+    }
+    if (newPolygons.length <= 1) return { type: 'Polygon', coordinates: newPolygons[0] || geometry.coordinates };
+    return { type: 'MultiPolygon', coordinates: newPolygons };
+  }
+
+  if (geometry.type === 'MultiPolygon') {
+    const allPolygons = [];
+    for (const poly of geometry.coordinates) {
+      const subGeom = splitGeometryAtAntimeridian({ type: 'Polygon', coordinates: poly });
+      if (subGeom.type === 'Polygon') {
+        allPolygons.push(subGeom.coordinates);
+      } else if (subGeom.type === 'MultiPolygon') {
+        allPolygons.push(...subGeom.coordinates);
+      }
+    }
+    return { type: 'MultiPolygon', coordinates: allPolygons };
+  }
+
+  return geometry;
+}
+
+// ================================================================
+// GAME STATE
+// ================================================================
+const canvas = document.getElementById('mapCanvas');
+const ctx = canvas.getContext('2d');
+const mapWrap = document.getElementById('mapWrap');
+
+let W = 800, H = 600;
+let cam = { x: MAP_W/2, y: MAP_H/2, z: 1, tz: 1, tx: MAP_W/2, ty: MAP_H/2 };
+
+let features = [];       // All country features from topojson
+let countryData = [];     // Processed: {id, info, polys (screen coords cache), centroid, bounds}
+let gameRegion = 'asia';
+let gameCountryIds = [];
+let placedIds = new Set();
+let unplacedIds = [];
+let score = 0, timer = 0, misses = 0, timerIv = null;
+let gameActive = false;
+
+let dragPiece = null;     // id of piece being dragged
+let dragScreenX = 0, dragScreenY = 0;
+let isPanning = false, panStartX = 0, panStartY = 0, camStartX = 0, camStartY = 0;
+let pinchDist0 = 0;
+
+let hintId = null, hintTimer = 0;
+let particles = [];
+let celebTimer = 0;
+
+let saved = {};
+try { saved = JSON.parse(localStorage.getItem('wmp_save') || '{}'); } catch(e){}
+
+// ================================================================
+// PROJECTION HELPERS
+// ================================================================
+function m2s(mx, my) {
+  return [(mx - cam.x) * cam.z + W / 2, (my - cam.y) * cam.z + H / 2];
+}
+function s2m(sx, sy) {
+  return [(sx - W / 2) / cam.z + cam.x, (sy - H / 2) / cam.z + cam.y];
+}
+
+// Get projected polygons for a feature
+function getPolys(feature) {
+  const g = feature.geometry;
+  if (g.type === 'Polygon') {
+    return [g.coordinates.map(ring => projCoords(ring))];
+  }
+  if (g.type === 'MultiPolygon') {
+    return g.coordinates.map(poly => poly.map(ring => projCoords(ring)));
+  }
+  return [];
+}
+
+// ================================================================
+// INITIALIZATION
+// ================================================================
+async function init() {
+  const loadMsg = document.getElementById('loadMsg');
+  try {
+    loadMsg.textContent = '地図データをダウンロード中...';
+    const resp = await fetch(TOPOJSON_URL);
+    if (!resp.ok) throw new Error('Failed to fetch map data');
+
+    // Try to show download progress
+    const contentLength = resp.headers.get('content-length');
+    let topo;
+    if (contentLength) {
+      const total = parseInt(contentLength, 10);
+      const reader = resp.body.getReader();
+      let received = 0;
+      const chunks = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        const pct = Math.floor(received / total * 100);
+        loadMsg.textContent = `地図データをダウンロード中... ${pct}%`;
+      }
+      const blob = new Blob(chunks);
+      topo = JSON.parse(await blob.text());
+    } else {
+      topo = await resp.json();
+    }
+
+    loadMsg.textContent = '地図を解析しています...';
+    await new Promise(r => setTimeout(r, 0)); // Allow UI update
+    features = decodeTopo(topo);
+
+    loadMsg.textContent = '国データを処理しています...';
+    await new Promise(r => setTimeout(r, 0));
+    processCountries();
+
+    console.log(`Loaded ${countryData.length} countries from TopoJSON`);
+
+    // Hide loading, show game
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('header').classList.remove('hidden');
+    document.getElementById('mapWrap').classList.remove('hidden');
+    document.getElementById('piecePanel').classList.remove('hidden');
+    document.getElementById('footer').classList.remove('hidden');
+
+    resize();
+    requestAnimationFrame(renderLoop);
+    showMenu();
+  } catch (e) {
+    loadMsg.textContent = '読み込みエラー: ' + e.message + '（インターネット接続を確認してください）';
+    console.error(e);
+  }
+}
+
+function processCountries() {
+  countryData = [];
+  for (const f of features) {
+    const rawId = String(f.id);
+    // TopoJSON uses numeric IDs (e.g. 4), CI uses zero-padded (e.g. '004')
+    const id = rawId.padStart(3, '0');
+    const info = CI[id] || CI[rawId];
+    if (!info) continue; // Skip countries without info mapping
+
+    // Split geometry at antimeridian BEFORE projecting to map coordinates
+    const splitGeom = splitGeometryAtAntimeridian(f.geometry);
+    const splitFeature = { ...f, geometry: splitGeom };
+    const polys = getPolys(splitFeature); // [polygon][ring][point[x,y]]
+    if (polys.length === 0) continue;
+
+    // Compute centroid and bounds
+    let cx = 0, cy = 0, cnt = 0;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const poly of polys) {
+      for (const ring of poly) {
+        for (const p of ring) {
+          cx += p[0]; cy += p[1]; cnt++;
+          minX = Math.min(minX, p[0]);
+          minY = Math.min(minY, p[1]);
+          maxX = Math.max(maxX, p[0]);
+          maxY = Math.max(maxY, p[1]);
+        }
+      }
+    }
+    cx /= cnt; cy /= cnt;
+
+    countryData.push({
+      id, info, polys, feature: f,
+      centroid: [cx, cy],
+      bounds: { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY }
+    });
+  }
+}
+
+// ================================================================
+// RENDERING - with offscreen cache for base map
+// ================================================================
+let baseCache = null; // Offscreen canvas for white land base
+let baseCacheCam = { x:0, y:0, z:0, w:0, h:0 }; // Camera state when cache was made
+let placedCacheDirty = true; // Whether placed overlay needs redraw
+
+function resize() {
+  const rect = mapWrap.getBoundingClientRect();
+  W = rect.width; H = rect.height;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  invalidateBaseCache();
+}
+
+function invalidateBaseCache() { baseCache = null; }
+
+function buildBaseCache() {
+  const dpr = window.devicePixelRatio || 1;
+  if (!baseCache) {
+    baseCache = document.createElement('canvas');
+  }
+  baseCache.width = W * dpr;
+  baseCache.height = H * dpr;
+  const bctx = baseCache.getContext('2d');
+  bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // Ocean
+  bctx.fillStyle = OCEAN_COLOR;
+  bctx.fillRect(0, 0, W, H);
+
+  // All countries white fill + border
+  for (const cd of countryData) {
+    drawCountryFillOn(bctx, cd, LAND_COLOR, 1);
+  }
+  for (const cd of countryData) {
+    drawCountryStrokeOn(bctx, cd, BORDER_COLOR, 0.5);
+  }
+
+  baseCacheCam.x = cam.x; baseCacheCam.y = cam.y; baseCacheCam.z = cam.z;
+  baseCacheCam.w = W; baseCacheCam.h = H;
+}
+
+function isCacheValid() {
+  if (!baseCache) return false;
+  const eps = 0.001;
+  return Math.abs(cam.x - baseCacheCam.x) < eps
+    && Math.abs(cam.y - baseCacheCam.y) < eps
+    && Math.abs(cam.z - baseCacheCam.z) < eps
+    && baseCacheCam.w === W && baseCacheCam.h === H;
+}
+
+function renderLoop() {
+  // Smooth camera
+  cam.z += (cam.tz - cam.z) * 0.18;
+  cam.x += (cam.tx - cam.x) * 0.18;
+  cam.y += (cam.ty - cam.y) * 0.18;
+
+  draw();
+  requestAnimationFrame(renderLoop);
+}
+
+function draw() {
+  // Rebuild base cache if camera moved
+  if (!isCacheValid()) {
+    buildBaseCache();
+  }
+
+  // Draw base map from cache
+  ctx.drawImage(baseCache, 0, 0, W, H);
+
+  // Draw placed countries with color (on top of white base)
+  for (const cd of countryData) {
+    if (!placedIds.has(cd.id)) continue;
+    const col = REGION_COLORS[cd.info.r] || '#4dc9f6';
+    drawCountryFillOn(ctx, cd, col, 0.65);
+    drawCountryStrokeOn(ctx, cd, '#ffffff', 1);
+    if (cam.z > 0.7) {
+      drawLabel(cd);
+    }
+  }
+
+  // Hint highlight
+  if (hintId && hintTimer > 0) {
+    hintTimer--;
+    const cd = countryData.find(c => c.id === hintId);
+    if (cd) {
+      const pulse = 0.4 + Math.sin(Date.now() / 150) * 0.25;
+      drawCountryFillOn(ctx, cd, '#ffee00', pulse);
+      drawCountryStrokeOn(ctx, cd, '#ffee00', 2);
+    }
+    if (hintTimer <= 0) hintId = null;
+  }
+
+  // Dragging piece ghost
+  if (dragPiece) {
+    const cd = countryData.find(c => c.id === dragPiece);
+    if (cd) {
+      const mp = s2m(dragScreenX, dragScreenY);
+      const offX = mp[0] - cd.centroid[0];
+      const offY = mp[1] - cd.centroid[1];
+      drawCountryFillOffset(ctx, cd, REGION_COLORS[cd.info.r] || '#4dc9f6', 0.5, offX, offY);
+      drawCountryStrokeOffset(ctx, cd, '#ffffff', 1.5, offX, offY);
+    }
+  }
+
+  // Particles
+  drawParticles();
+
+  // Celebration
+  if (celebTimer > 0) {
+    celebTimer--;
+    if (celebTimer % 2 === 0) {
+      const cols = ['#f87171','#34d399','#60a5fa','#f59e0b','#a78bfa','#fb923c','#4dc9f6'];
+      spawnParts(Math.random() * W, Math.random() * H, cols[Math.floor(Math.random()*cols.length)], 4);
+    }
+  }
+}
+
+// All draw functions accept a target context (c) for offscreen rendering
+function drawCountryFillOn(c, cd, color, alpha) {
+  c.save();
+  c.globalAlpha = alpha;
+  c.fillStyle = color;
+  for (const poly of cd.polys) {
+    c.beginPath();
+    for (let ri = 0; ri < poly.length; ri++) {
+      const ring = poly[ri];
+      for (let i = 0; i < ring.length; i++) {
+        const s = m2s(ring[i][0], ring[i][1]);
+        if (i === 0) c.moveTo(s[0], s[1]); else c.lineTo(s[0], s[1]);
+      }
+      c.closePath();
+    }
+    c.fill('evenodd');
+  }
+  c.restore();
+}
+
+function drawCountryStrokeOn(c, cd, color, lw) {
+  c.save();
+  c.strokeStyle = color;
+  c.lineWidth = lw;
+  c.lineJoin = 'round';
+  for (const poly of cd.polys) {
+    for (const ring of poly) {
+      c.beginPath();
+      for (let i = 0; i < ring.length; i++) {
+        const s = m2s(ring[i][0], ring[i][1]);
+        if (i === 0) c.moveTo(s[0], s[1]); else c.lineTo(s[0], s[1]);
+      }
+      c.closePath();
+      c.stroke();
+    }
+  }
+  c.restore();
+}
+
+function drawCountryFillOffset(c, cd, color, alpha, ox, oy) {
+  c.save();
+  c.globalAlpha = alpha;
+  c.fillStyle = color;
+  for (const poly of cd.polys) {
+    c.beginPath();
+    for (const ring of poly) {
+      for (let i = 0; i < ring.length; i++) {
+        const s = m2s(ring[i][0] + ox, ring[i][1] + oy);
+        if (i === 0) c.moveTo(s[0], s[1]); else c.lineTo(s[0], s[1]);
+      }
+      c.closePath();
+    }
+    c.fill('evenodd');
+  }
+  c.restore();
+}
+
+function drawCountryStrokeOffset(c, cd, color, lw, ox, oy) {
+  c.save();
+  c.strokeStyle = color;
+  c.lineWidth = lw;
+  c.lineJoin = 'round';
+  for (const poly of cd.polys) {
+    for (const ring of poly) {
+      c.beginPath();
+      for (let i = 0; i < ring.length; i++) {
+        const s = m2s(ring[i][0] + ox, ring[i][1] + oy);
+        if (i === 0) c.moveTo(s[0], s[1]); else c.lineTo(s[0], s[1]);
+      }
+      c.closePath();
+      c.stroke();
+    }
+  }
+  c.restore();
+}
+
+function drawLabel(cd) {
+  const s = m2s(cd.centroid[0], cd.centroid[1]);
+  const fs = Math.max(7, Math.min(13, 9 * cam.z));
+  ctx.save();
+  ctx.font = `bold ${fs}px 'Segoe UI','Hiragino Sans',sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = 'rgba(0,0,0,0.7)';
+  ctx.shadowBlur = 3;
+  ctx.fillText(cd.info.n, s[0], s[1]);
+  ctx.restore();
+}
+
+// ================================================================
+// PARTICLES
+// ================================================================
+function spawnParts(x, y, color, count) {
+  for (let i = 0; i < count; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 1 + Math.random() * 3;
+    particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, life: 30+Math.random()*25, ml: 55, sz: 2+Math.random()*3, color });
+  }
+}
+
+function drawParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx; p.y += p.vy;
+    p.vx *= 0.96; p.vy *= 0.96;
+    p.life--;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    ctx.save();
+    ctx.globalAlpha = p.life / p.ml;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.sz * (p.life / p.ml), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ================================================================
+// PIECE BAR
+// ================================================================
+let pieceFilter = 'all'; // 'all' or region key
+
+function buildRegionTabs() {
+  const tabs = document.getElementById('regionTabs');
+  tabs.innerHTML = '';
+  const regions = gameRegion === 'world'
+    ? ['all','asia','europe','africa','north_america','south_america','oceania']
+    : ['all'];
+
+  const labels = { all:'すべて', asia:'アジア', europe:'ヨーロッパ', africa:'アフリカ', north_america:'北米・中米', south_america:'南米', oceania:'オセアニア' };
+
+  for (const r of regions) {
+    const t = document.createElement('div');
+    t.className = 'rtab' + (r === pieceFilter ? ' active' : '');
+    t.textContent = labels[r] || r;
+    t.addEventListener('click', () => { pieceFilter = r; buildRegionTabs(); renderPieces(); });
+    tabs.appendChild(t);
+  }
+}
+
+function renderPieces() {
+  const list = document.getElementById('pieceList');
+  list.innerHTML = '';
+
+  let ids = [...unplacedIds];
+  if (pieceFilter !== 'all') {
+    ids = ids.filter(id => {
+      const cd = countryData.find(c => c.id === id);
+      return cd && cd.info.r === pieceFilter;
+    });
+  }
+
+  // Sort by name
+  ids.sort((a, b) => {
+    const ca = countryData.find(c => c.id === a);
+    const cb = countryData.find(c => c.id === b);
+    return (ca?.info.n || '').localeCompare(cb?.info.n || '', 'ja');
+  });
+
+  for (const id of ids) {
+    const cd = countryData.find(c => c.id === id);
+    if (!cd) continue;
+
+    const card = document.createElement('div');
+    card.className = 'pc';
+    card.dataset.id = id;
+
+    // Mini canvas
+    const mc = document.createElement('canvas');
+    mc.width = 104; mc.height = 80;
+    drawMiniCountry(mc, cd);
+    card.appendChild(mc);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'pc-label';
+    lbl.textContent = cd.info.n;
+    card.appendChild(lbl);
+
+    card.addEventListener('mousedown', e => startDrag(e, id));
+    card.addEventListener('touchstart', e => startDrag(e, id), { passive: false });
+
+    // Tooltip
+    card.addEventListener('mouseenter', e => showTT(e, cd));
+    card.addEventListener('mouseleave', hideTT);
+
+    list.appendChild(card);
+  }
+}
+
+function drawMiniCountry(mc, cd) {
+  const mctx = mc.getContext('2d');
+  const w = mc.width, h = mc.height;
+  const b = cd.bounds;
+  const pad = 6;
+  const sc = Math.min((w - pad*2) / b.w, (h - pad*2) / b.h);
+  const ox = (b.minX + b.maxX) / 2;
+  const oy = (b.minY + b.maxY) / 2;
+  const col = REGION_COLORS[cd.info.r] || '#4dc9f6';
+
+  for (const poly of cd.polys) {
+    mctx.beginPath();
+    for (const ring of poly) {
+      for (let i = 0; i < ring.length; i++) {
+        const sx = (ring[i][0] - ox) * sc + w / 2;
+        const sy = (ring[i][1] - oy) * sc + h / 2;
+        if (i === 0) mctx.moveTo(sx, sy); else mctx.lineTo(sx, sy);
+      }
+      mctx.closePath();
+    }
+    mctx.fillStyle = col;
+    mctx.globalAlpha = 0.7;
+    mctx.fill('evenodd');
+    mctx.globalAlpha = 1;
+    mctx.strokeStyle = '#c0d0e8';
+    mctx.lineWidth = 0.8;
+    mctx.stroke();
+  }
+}
+
+// ================================================================
+// DRAG & DROP
+// ================================================================
+function evPos(e) {
+  if (e.touches?.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  if (e.changedTouches?.length > 0) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+  return { x: e.clientX, y: e.clientY };
+}
+
+function startDrag(e, id) {
+  e.preventDefault();
+  dragPiece = id;
+  const p = evPos(e);
+  const rect = mapWrap.getBoundingClientRect();
+  dragScreenX = p.x - rect.left;
+  dragScreenY = p.y - rect.top;
+
+  const card = document.querySelector(`.pc[data-id="${id}"]`);
+  if (card) card.classList.add('dragging');
+
+  document.addEventListener('mousemove', onDragMove);
+  document.addEventListener('mouseup', onDragEnd);
+  document.addEventListener('touchmove', onDragMove, { passive: false });
+  document.addEventListener('touchend', onDragEnd);
+}
+
+function onDragMove(e) {
+  e.preventDefault();
+  const p = evPos(e);
+  const rect = mapWrap.getBoundingClientRect();
+  dragScreenX = p.x - rect.left;
+  dragScreenY = p.y - rect.top;
+}
+
+function onDragEnd(e) {
+  document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mouseup', onDragEnd);
+  document.removeEventListener('touchmove', onDragMove);
+  document.removeEventListener('touchend', onDragEnd);
+
+  const card = document.querySelector(`.pc[data-id="${dragPiece}"]`);
+  if (card) card.classList.remove('dragging');
+
+  if (!dragPiece || !gameActive) { dragPiece = null; return; }
+
+  // Check if dropped on map
+  const p = evPos(e);
+  const rect = mapWrap.getBoundingClientRect();
+  const sx = p.x - rect.left;
+  const sy = p.y - rect.top;
+
+  if (sx >= 0 && sx <= W && sy >= 0 && sy <= H) {
+    checkPlace(dragPiece, sx, sy);
+  }
+  dragPiece = null;
+}
+
+function checkPlace(id, sx, sy) {
+  const cd = countryData.find(c => c.id === id);
+  if (!cd) return;
+
+  const sc = m2s(cd.centroid[0], cd.centroid[1]);
+  const d = Math.sqrt((sx - sc[0])**2 + (sy - sc[1])**2);
+
+  // Threshold based on country size
+  const sizeOnScreen = Math.max(cd.bounds.w, cd.bounds.h) * cam.z;
+  const threshold = Math.max(25, sizeOnScreen * 0.45);
+
+  if (d < threshold) {
+    // Correct!
+    placedIds.add(id);
+    unplacedIds = unplacedIds.filter(i => i !== id);
+    score += 100 + Math.floor(Math.max(0, (1 - d / threshold) * 50));
+    spawnParts(sc[0], sc[1], REGION_COLORS[cd.info.r] || '#4dc9f6', 18);
+    renderPieces();
+    updateHUD();
+    if (unplacedIds.length === 0) onComplete();
+  } else {
+    misses++;
+    spawnParts(sx, sy, '#ff4444', 6);
+  }
+}
+
+// ================================================================
+// MAP PAN & ZOOM
+// ================================================================
+// Mouse pan
+mapWrap.addEventListener('mousedown', e => {
+  if (dragPiece || e.target !== canvas) return;
+  isPanning = true;
+  panStartX = e.clientX; panStartY = e.clientY;
+  camStartX = cam.tx; camStartY = cam.ty;
+  mapWrap.style.cursor = 'grabbing';
+});
+document.addEventListener('mousemove', e => {
+  if (!isPanning) return;
+  cam.tx = camStartX - (e.clientX - panStartX) / cam.z;
+  cam.ty = camStartY - (e.clientY - panStartY) / cam.z;
+});
+document.addEventListener('mouseup', () => {
+  isPanning = false;
+  mapWrap.style.cursor = 'grab';
+});
+
+// Wheel zoom (PC)
+mapWrap.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY > 0 ? 0.88 : 1.12;
+  cam.tz = clamp(cam.tz * f, 0.3, 12);
+}, { passive: false });
+
+// Zoom buttons (PC)
+document.getElementById('zoomIn').addEventListener('click', () => { cam.tz = clamp(cam.tz * 1.3, 0.3, 12); });
+document.getElementById('zoomOut').addEventListener('click', () => { cam.tz = clamp(cam.tz * 0.7, 0.3, 12); });
+document.getElementById('zoomFit').addEventListener('click', fitCamera);
+
+// Touch pan & pinch
+mapWrap.addEventListener('touchstart', e => {
+  if (dragPiece) return;
+  if (e.touches.length === 1) {
+    isPanning = true;
+    panStartX = e.touches[0].clientX; panStartY = e.touches[0].clientY;
+    camStartX = cam.tx; camStartY = cam.ty;
+  }
+  if (e.touches.length === 2) {
+    isPanning = false;
+    pinchDist0 = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+}, { passive: true });
+
+mapWrap.addEventListener('touchmove', e => {
+  if (dragPiece) return;
+  if (e.touches.length === 1 && isPanning) {
+    cam.tx = camStartX - (e.touches[0].clientX - panStartX) / cam.z;
+    cam.ty = camStartY - (e.touches[0].clientY - panStartY) / cam.z;
+  }
+  if (e.touches.length === 2) {
+    const d = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    cam.tz = clamp(cam.tz * (d / pinchDist0), 0.3, 12);
+    pinchDist0 = d;
+  }
+}, { passive: true });
+
+mapWrap.addEventListener('touchend', () => { isPanning = false; });
+
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+// ================================================================
+// TOOLTIP
+// ================================================================
+const ttEl = document.getElementById('tooltip');
+function showTT(e, cd) {
+  ttEl.style.display = 'block';
+  ttEl.querySelector('.tt-name').textContent = cd.info.n;
+  ttEl.querySelector('.tt-en').textContent = cd.info.e;
+  ttEl.querySelector('.tt-info').innerHTML = `首都: ${cd.info.c}<br>人口: ${cd.info.p}<br>面積: ${cd.info.a}`;
+  const rect = mapWrap.getBoundingClientRect();
+  const x = e.clientX - rect.left + 12;
+  const y = e.clientY - rect.top - 10;
+  ttEl.style.left = Math.min(x, W - 250) + 'px';
+  ttEl.style.top = Math.min(y, H - 100) + 'px';
+}
+function hideTT() { ttEl.style.display = 'none'; }
+
+// Hover tooltip on placed countries
+mapWrap.addEventListener('mousemove', e => {
+  if (dragPiece || isPanning) return;
+  const rect = mapWrap.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const mp = s2m(sx, sy);
+
+  for (const cd of countryData) {
+    if (!placedIds.has(cd.id)) continue;
+    if (ptInCountry(mp[0], mp[1], cd)) {
+      showTT(e, cd);
+      return;
+    }
+  }
+  if (e.target === canvas) hideTT();
+});
+
+function ptInCountry(mx, my, cd) {
+  for (const poly of cd.polys) {
+    if (poly.length > 0 && ptInPoly(mx, my, poly[0])) return true;
+  }
+  return false;
+}
+
+function ptInPoly(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1];
+    const xj = ring[j][0], yj = ring[j][1];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+// ================================================================
+// HUD
+// ================================================================
+function updateHUD() {
+  document.getElementById('hRegion').textContent = REGION_META[gameRegion]?.name || '-';
+  document.getElementById('hScore').textContent = score;
+  const total = gameCountryIds.length;
+  const placed = placedIds.size;
+  document.getElementById('fProg').textContent = `${placed}/${total}`;
+  document.getElementById('fBar').style.width = (total ? placed / total * 100 : 0) + '%';
+}
+
+function tickTimer() {
+  timer++;
+  const m = Math.floor(timer / 60);
+  const s = timer % 60;
+  document.getElementById('hTimer').textContent = `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+// ================================================================
+// HINT
+// ================================================================
+document.getElementById('btnHint').addEventListener('click', () => {
+  if (!gameActive || unplacedIds.length === 0) return;
+  const id = unplacedIds[Math.floor(Math.random() * unplacedIds.length)];
+  hintId = id;
+  hintTimer = 180;
+  // Pan to hint
+  const cd = countryData.find(c => c.id === id);
+  if (cd) { cam.tx = cd.centroid[0]; cam.ty = cd.centroid[1]; }
+});
+
+// ================================================================
+// MENU
+// ================================================================
+function showMenu() {
+  document.getElementById('menuModal').classList.remove('hidden');
+  document.getElementById('completeModal').classList.add('hidden');
+  gameActive = false;
+  if (timerIv) clearInterval(timerIv);
+  buildMenuGrid();
+}
+
+function buildMenuGrid() {
+  const grid = document.getElementById('regionGrid');
+  grid.innerHTML = '';
+  for (const [key, meta] of Object.entries(REGION_META)) {
+    const btn = document.createElement('button');
+    btn.className = 'rbtn';
+    const cnt = key === 'world'
+      ? countryData.length
+      : countryData.filter(c => c.info.r === key).length;
+    const sv = saved[key];
+    const starHtml = sv ? `<span class="stars">${'★'.repeat(sv.stars)}${'☆'.repeat(3 - sv.stars)}</span>` : '';
+    btn.innerHTML = `${meta.name}<span class="cnt">${cnt}国</span>${starHtml}`;
+    btn.style.borderLeft = `4px solid ${REGION_COLORS[key] || '#4dc9f6'}`;
+    btn.addEventListener('click', () => {
+      grid.querySelectorAll('.rbtn').forEach(b => b.style.background = '#141c30');
+      btn.style.background = '#1a2848';
+      gameRegion = key;
+    });
+    if (key === gameRegion) btn.style.background = '#1a2848';
+    grid.appendChild(btn);
+  }
+}
+
+document.getElementById('btnStart').addEventListener('click', startGame);
+document.getElementById('btnMenu').addEventListener('click', showMenu);
+document.getElementById('btnReset').addEventListener('click', () => {
+  if (gameActive && confirm('リセットしますか？')) startGame();
+});
+document.getElementById('btnBack').addEventListener('click', showMenu);
+
+// ================================================================
+// GAME START / COMPLETE
+// ================================================================
+function startGame() {
+  document.getElementById('menuModal').classList.add('hidden');
+  document.getElementById('completeModal').classList.add('hidden');
+
+  if (gameRegion === 'world') {
+    gameCountryIds = countryData.map(c => c.id);
+  } else {
+    gameCountryIds = countryData.filter(c => c.info.r === gameRegion).map(c => c.id);
+  }
+
+  placedIds = new Set();
+  unplacedIds = [...gameCountryIds];
+  // Shuffle
+  for (let i = unplacedIds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [unplacedIds[i], unplacedIds[j]] = [unplacedIds[j], unplacedIds[i]];
+  }
+
+  score = 0; timer = 0; misses = 0;
+  hintId = null; hintTimer = 0;
+  particles = []; celebTimer = 0;
+  pieceFilter = 'all';
+
+  gameActive = true;
+  if (timerIv) clearInterval(timerIv);
+  timerIv = setInterval(tickTimer, 1000);
+
+  fitCamera();
+  buildRegionTabs();
+  renderPieces();
+  updateHUD();
+}
+
+function fitCamera() {
+  const bounds = REGION_META[gameRegion]?.bounds;
+  if (!bounds) {
+    // World view: show the entire map centered
+    cam.tx = MAP_W / 2;
+    cam.ty = MAP_H / 2;
+    cam.tz = clamp(Math.min(W / MAP_W, H / MAP_H) * 0.95, 0.3, 12);
+    return;
+  }
+  const tl = [lonToX(bounds[0]), latToY(bounds[3])];
+  const br = [lonToX(bounds[1]), latToY(bounds[2])];
+  cam.tx = (tl[0] + br[0]) / 2;
+  cam.ty = (tl[1] + br[1]) / 2;
+  const zx = W / (br[0] - tl[0]);
+  const zy = H / (br[1] - tl[1]);
+  cam.tz = clamp(Math.min(zx, zy) * 0.9, 0.3, 12);
+}
+
+function onComplete() {
+  gameActive = false;
+  if (timerIv) clearInterval(timerIv);
+
+  const timeBonus = Math.max(0, 3000 - timer * 10);
+  const accBonus = Math.max(0, gameCountryIds.length * 50 - misses * 30);
+  score = Math.max(0, score + timeBonus + accBonus);
+
+  const maxP = gameCountryIds.length * 150;
+  const ratio = score / maxP;
+  const stars = ratio > 0.8 ? 3 : ratio > 0.5 ? 2 : 1;
+
+  if (!saved[gameRegion] || saved[gameRegion].score < score) {
+    saved[gameRegion] = { score, time: timer, stars };
+    try { localStorage.setItem('wmp_save', JSON.stringify(saved)); } catch(e){}
+  }
+
+  celebTimer = 200;
+  setTimeout(() => {
+    document.getElementById('cScore').textContent = score.toLocaleString();
+    document.getElementById('cDetail').innerHTML =
+      `タイム: ${Math.floor(timer/60)}:${(timer%60).toString().padStart(2,'0')}<br>` +
+      `タイムボーナス: +${timeBonus.toLocaleString()}<br>` +
+      `正確性ボーナス: +${accBonus.toLocaleString()}<br>` +
+      `ミス: ${misses}回`;
+    document.getElementById('cStars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+    document.getElementById('completeModal').classList.remove('hidden');
+  }, 1500);
+}
+
+// ================================================================
+// RESIZE & INIT
+// ================================================================
+window.addEventListener('resize', () => { resize(); });
+init();
+</script>
+</body>
+</html>
