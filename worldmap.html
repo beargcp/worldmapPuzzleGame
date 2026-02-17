@@ -42,7 +42,7 @@ body{background:#0a1628;color:#fff;font-family:'Segoe UI','Hiragino Sans',sans-s
 .rtab{padding:6px 14px;font-size:12px;color:#5a7a9b;cursor:pointer;border-bottom:2px solid transparent;transition:.15s;white-space:nowrap;flex-shrink:0}
 .rtab:hover{color:#aac}
 .rtab.active{color:#4dc9f6;border-bottom-color:#4dc9f6}
-#pieceList{display:flex;gap:6px;padding:8px 10px;overflow-x:auto;overflow-y:hidden;flex:1;align-items:center}
+#pieceList{display:flex;gap:6px;padding:8px 10px;overflow-x:auto;overflow-y:hidden;flex:1;align-items:center;touch-action:pan-x;-webkit-overflow-scrolling:touch}
 #pieceList::-webkit-scrollbar{height:5px}
 #pieceList::-webkit-scrollbar-thumb{background:#2a3a5c;border-radius:3px}
 .pc{min-width:72px;height:72px;background:#141c30;border:2px solid #1e2d50;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:grab;transition:.15s;padding:3px;flex-shrink:0}
@@ -1011,7 +1011,7 @@ function renderPieces() {
     card.appendChild(lbl);
 
     card.addEventListener('mousedown', e => startDrag(e, id));
-    card.addEventListener('touchstart', e => startDrag(e, id), { passive: false });
+    card.addEventListener('touchstart', e => startTouchDrag(e, id), { passive: false });
 
     // Tooltip
     card.addEventListener('mouseenter', e => showTT(e, cd));
@@ -1058,6 +1058,76 @@ function evPos(e) {
   if (e.touches?.length > 0) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
   if (e.changedTouches?.length > 0) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
   return { x: e.clientX, y: e.clientY };
+}
+
+// Touch drag: wait for movement threshold to distinguish scroll vs drag
+let touchDragState = null;
+const DRAG_THRESHOLD = 12; // pixels before deciding scroll vs drag
+
+function startTouchDrag(e, id) {
+  const t = e.touches[0];
+  touchDragState = { id, startX: t.clientX, startY: t.clientY, decided: false };
+
+  const onTouchMove = ev => {
+    if (!touchDragState) return;
+    const touch = ev.touches[0];
+    const dx = touch.clientX - touchDragState.startX;
+    const dy = touch.clientY - touchDragState.startY;
+
+    if (!touchDragState.decided && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // Horizontal movement = scroll the piece list, let browser handle it
+        cleanup();
+        return;
+      } else {
+        // Vertical movement = drag piece to map
+        touchDragState.decided = true;
+        ev.preventDefault();
+        dragPiece = touchDragState.id;
+        const rect = mapWrap.getBoundingClientRect();
+        dragScreenX = touch.clientX - rect.left;
+        dragScreenY = touch.clientY - rect.top;
+
+        const card = document.querySelector(`.pc[data-id="${touchDragState.id}"]`);
+        if (card) card.classList.add('dragging');
+      }
+    }
+
+    if (touchDragState && touchDragState.decided) {
+      ev.preventDefault();
+      const rect = mapWrap.getBoundingClientRect();
+      dragScreenX = touch.clientX - rect.left;
+      dragScreenY = touch.clientY - rect.top;
+    }
+  };
+
+  const onTouchEnd = ev => {
+    if (touchDragState && touchDragState.decided && dragPiece) {
+      const card = document.querySelector(`.pc[data-id="${dragPiece}"]`);
+      if (card) card.classList.remove('dragging');
+
+      if (gameActive) {
+        const p = ev.changedTouches[0];
+        const rect = mapWrap.getBoundingClientRect();
+        const sx = p.clientX - rect.left;
+        const sy = p.clientY - rect.top;
+        if (sx >= 0 && sx <= W && sy >= 0 && sy <= H) {
+          checkPlace(dragPiece, sx, sy);
+        }
+      }
+      dragPiece = null;
+    }
+    cleanup();
+  };
+
+  function cleanup() {
+    touchDragState = null;
+    document.removeEventListener('touchmove', onTouchMove);
+    document.removeEventListener('touchend', onTouchEnd);
+  }
+
+  document.addEventListener('touchmove', onTouchMove, { passive: false });
+  document.addEventListener('touchend', onTouchEnd);
 }
 
 function startDrag(e, id) {
